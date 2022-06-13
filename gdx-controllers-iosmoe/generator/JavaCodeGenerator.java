@@ -1,35 +1,36 @@
-import java.io.File;
-import java.io.FileWriter;
-import java.lang.reflect.Field;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Map.Entry;
-
 import com.github.javaparser.JavaParser;
 import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.CompilationUnit;
+import com.github.javaparser.ast.Modifier.Keyword;
+import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
-import com.github.javaparser.ast.body.Parameter;
+import com.github.javaparser.ast.expr.ArrayAccessExpr;
 import com.github.javaparser.ast.expr.CastExpr;
-import com.github.javaparser.ast.expr.ClassExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
+import com.github.javaparser.ast.expr.IntegerLiteralExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.Name;
 import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.NullLiteralExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.SimpleName;
-import com.github.javaparser.ast.expr.SwitchExpr;
-import com.github.javaparser.ast.expr.VariableDeclarationExpr;
+import com.github.javaparser.ast.expr.StringLiteralExpr;
+import com.github.javaparser.ast.stmt.BlockStmt;
+import com.github.javaparser.ast.stmt.ReturnStmt;
 import com.github.javaparser.ast.stmt.SwitchStmt;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.PrimitiveType;
-import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.printer.lexicalpreservation.LexicalPreservingPrinter;
+
+import java.io.File;
+import java.io.FileWriter;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Map.Entry;
 
 public class JavaCodeGenerator {
 	/** This would allow us to keep exact formatting, but it's broken for FieldDeclarations for some reason. Potential related to
@@ -45,13 +46,15 @@ public class JavaCodeGenerator {
 	static {
 		IMPORT_REPLACEMENTS.put("apple.corehaptics.CHHapticPatternPlayer", "apple.corehaptics.protocol.CHHapticPatternPlayer");
 		IMPORT_REPLACEMENTS.put("apple.gamecontroller.GCControllerPlayerIndex", "apple.gamecontroller.enums.GCControllerPlayerIndex");
+		IMPORT_REPLACEMENTS.put("apple.uikit.UIKeyModifierFlags", "apple.uikit.enums.UIKeyModifierFlags");
+		IMPORT_REPLACEMENTS.put("org.robovm.objc.Selector", "org.moe.natj.objc.SEL");
 
 
-		/*for (Entry<String, String> e : IMPORT_REPLACEMENTS.entrySet()) {
+		for (Entry<String, String> e : IMPORT_REPLACEMENTS.entrySet()) {
 			String o = e.getKey().substring(e.getKey().lastIndexOf('.') + 1);
 			String n = e.getValue().substring(e.getValue().lastIndexOf('.') + 1);
 			CLASS_REPLACEMENTS.put(o, n);
-		}*/
+		}
 
 		addMOEMethodReplace("getExtendedGamepad");
 		addMOEMethodReplace("getGamepad");
@@ -83,6 +86,8 @@ public class JavaCodeGenerator {
 		addMOEMethodReplace("getXAxis");
 		addMOEMethodReplace("getYAxis");
 		addMOEMethodReplace("getValue");
+		addMOEMethodReplace("getInput");
+		addMOEMethodReplace("getControllers");
 
 		METHOD_REPLACEMENTS.put("createEngine", "createEngineWithLocality");
 
@@ -124,11 +129,33 @@ public class JavaCodeGenerator {
 			cu.addImport("apple.gamecontroller.c.GameController");
 			cu.addImport("apple.corehaptics.c.CoreHaptics");
 			cu.addImport("org.moe.natj.objc.ObjCRuntime");
+			cu.addImport("apple.uikit.UIDevice");
+		}
+
+		if (f.getName().equals("IosControllerManager.java")) {
+			cu.addImport("apple.uikit.UIDevice");
 		}
 
 		final JavaParser javaParser = new JavaParser();
 
 		ModifierVisitor<Object> visitor = new ModifierVisitor() {
+
+			@Override
+			public Visitable visit(MethodDeclaration n, Object arg) {
+				if (n.getNameAsString().equals("getPlayerIndex")) {
+					NameExpr nameExpr = new NameExpr("controller");
+					MethodCallExpr methodCallExpr = new MethodCallExpr(nameExpr, "playerIndex");
+					CastExpr castExpr = new CastExpr(PrimitiveType.intType(), methodCallExpr);
+					ReturnStmt returnStmt = new ReturnStmt(castExpr);
+					BlockStmt blockStmt = new BlockStmt();
+					blockStmt.addStatement(returnStmt);
+					n.setBody(blockStmt);
+				}
+				if (n.getNameAsString().equals("constructRumbleEvent")) {
+					n.setThrownExceptions(new NodeList<>());
+				}
+				return super.visit(n, arg);
+			}
 
 			@Override
 			public Visitable visit(SwitchStmt n, Object arg) {
@@ -150,8 +177,12 @@ public class JavaCodeGenerator {
 
 			@Override
 			public Visitable visit(MethodCallExpr n, Object arg) {
-				if (METHOD_REPLACEMENTS.containsKey(n.getNameAsString())) {
+				if (METHOD_REPLACEMENTS.containsKey(n.getNameAsString()) && n.getScope().isPresent() && !n.getScope().get().isSuperExpr()) {
 					n.setName(METHOD_REPLACEMENTS.get(n.getNameAsString()));
+				}
+
+				if (n.getNameAsString().equals("getMajorSystemVersion")) {
+					n.setScope(null);
 				}
 
 				if (n.getNameAsString().equals("release")) {
@@ -188,12 +219,6 @@ public class JavaCodeGenerator {
 						return new NameExpr("index");
 					}
 				}
-				return super.visit(n, arg);
-			}
-
-			@Override
-			public Visitable visit(VariableDeclarationExpr n, Object arg) {
-				System.out.println(n);
 				return super.visit(n, arg);
 			}
 
@@ -296,8 +321,26 @@ public class JavaCodeGenerator {
 
 				n.setJavadocComment("DO NOT EDIT THIS FILE - it is machine generated\n" + base);
 
-				if (n.getNameAsString().equals("IosController")) {
+				if (n.getNameAsString().equals("IosController") || n.getNameAsString().equals("IosControllerManager")) {
+					MethodDeclaration declaration = n.addMethod("getMajorSystemVersion", Keyword.PRIVATE, Keyword.STATIC);
+					declaration.setType(PrimitiveType.intType());
 
+					NameExpr nameExpr = new NameExpr("UIDevice");
+					MethodCallExpr current = new MethodCallExpr(nameExpr, "currentDevice");
+					MethodCallExpr version = new MethodCallExpr(current, "systemVersion");
+					MethodCallExpr split = new MethodCallExpr(version, "split");
+					split.addArgument(new StringLiteralExpr("\\\\."));
+
+					ArrayAccessExpr accessExpr = new ArrayAccessExpr(split, new IntegerLiteralExpr(0));
+
+					NameExpr intName = new NameExpr("Integer");
+					MethodCallExpr parseInt = new MethodCallExpr(intName, "parseInt");
+					parseInt.addArgument(accessExpr);
+
+					ReturnStmt returnStmt = new ReturnStmt(parseInt);
+					BlockStmt blockStmt = new BlockStmt();
+					blockStmt.addStatement(returnStmt);
+					declaration.setBody(blockStmt);
 				}
 
 
