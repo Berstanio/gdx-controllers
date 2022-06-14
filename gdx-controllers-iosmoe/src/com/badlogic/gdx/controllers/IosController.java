@@ -426,7 +426,7 @@ public class IosController extends AbstractController {
     }
 
     public CHHapticPattern constructRumbleEvent(float length, float strength) {
-        NSArray<CHHapticEventParameter> params = (NSArray<CHHapticEventParameter>)NSArray.arrayWithObjects(CHHapticEventParameter.alloc().initWithParameterIDValue(CoreHaptics.CHHapticEventParameterIDHapticIntensity(), strength), CHHapticEventParameter.alloc().initWithParameterIDValue(CoreHaptics.CHHapticEventParameterIDHapticSharpness(), .5f));
+        NSArray<CHHapticEventParameter> params = (NSArray<CHHapticEventParameter>)NSArray.arrayWithObjects(CHHapticEventParameter.alloc().initWithParameterIDValue(CoreHaptics.CHHapticEventParameterIDHapticIntensity(), strength), CHHapticEventParameter.alloc().initWithParameterIDValue(CoreHaptics.CHHapticEventParameterIDHapticSharpness(), .5f), null);
         return CHHapticPattern.alloc().initWithEventsParameterCurvesError(
                 (NSArray<? extends CHHapticEvent>)NSArray.arrayWithObject(CHHapticEvent.alloc().initWithEventTypeParametersRelativeTimeDuration(CoreHaptics.CHHapticEventTypeHapticContinuous(), params, 0, length)),
                 (NSArray<? extends CHHapticParameterCurve>)NSArray.array(), null);

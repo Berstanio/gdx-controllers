@@ -250,8 +250,11 @@ public class JavaCodeGenerator {
 						expr = new MethodCallExpr(nameExpr, "array");
 					} else if (n.getArguments().size() == 1) {
 						expr = new MethodCallExpr(nameExpr, "arrayWithObject");
+						expr.setArguments(n.getArguments());
 					} else {
 						expr = new MethodCallExpr(nameExpr, "arrayWithObjects");
+						expr.setArguments(n.getArguments());
+						expr.addArgument(new NullLiteralExpr());
 					}
 					expr.setArguments(n.getArguments());
 					return super.visit(expr, arg);
